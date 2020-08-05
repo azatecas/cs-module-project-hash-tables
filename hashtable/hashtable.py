@@ -1,4 +1,4 @@
-class Entry:
+class HashTableEntry:
     """
     Linked List hash table key/value pair
     """
@@ -21,11 +21,12 @@ class HashTable:
     """
 
     def __init__(self, capacity):
+        # Your code here
         self.capacity = capacity
-        self.size = 0
-        self.keys = []
-        self.storage = [
-            None] * capacity if capacity >= MIN_CAPACITY else [None] * MIN_CAPACITY
+        if capacity < MIN_CAPACITY:
+            self.capacity = MIN_CAPACITY
+        self.storage = [None]*self.capacity
+        self.item_stored = 0
 
     def get_num_slots(self):
         """
@@ -35,44 +36,55 @@ class HashTable:
         One of the tests relies on this.
         Implement this.
         """
-        return len(self.storage)
+        # Your code here
+        return self.capacity
 
     def get_load_factor(self):
         """
         Return the load factor for this hash table.
         Implement this.
         """
-        return self.size / self.capacity
+        # Your code here
+        return self.item_stored/self.capacity
 
     def fnv1(self, key):
         """
         FNV-1 Hash, 64-bit
         Implement this, and/or DJB2.
         """
-        hash = 0xcbf29ce484222325
-        for character in key:
-            hash ^= ord(character)
-            hash *= 0x100000001b3
-            hash &= 0xffffffffffffffff
-        return hash
+
+        # Your code here
+        # prime and offset basis are based on 64bit
+        FNV_prime = 1099511628211
+        FNV_offset_basis = 14695981039346656037
+
+        hash_index = FNV_offset_basis
+        bytes_to_hash = key.encode()
+        for byte in bytes_to_hash:
+            hash_index = hash_index * FNV_prime
+            hash_index = hash_index ^ byte
+        return hash_index
 
     def djb2(self, key):
         """
         DJB2 hash, 32-bit
         Implement this, and/or FNV-1.
         """
-        hash = 5381
-        for c in key:
-            hash = (hash * 33) + ord(c)
-        return hash
+        # Your code here
+        hash_index = 5381
+        bytes_to_hash = key.encode()
+
+        for byte in bytes_to_hash:
+            hash_index = ((hash_index << 5) + hash_index) + byte
+        return hash_index
 
     def hash_index(self, key):
         """
         Take an arbitrary key and return a valid integer index
         between within the storage capacity of the hash table.
         """
-        return self.fnv1(key) % self.capacity
-        # return self.djb2(key) % self.capacity
+        # return self.fnv1(key) % self.capacity
+        return self.djb2(key) % self.capacity
 
     def put(self, key, value):
         """
@@ -80,26 +92,34 @@ class HashTable:
         Hash collisions should be handled with Linked List Chaining.
         Implement this.
         """
-        self.size += 1
-        self.keys.append(key)
-        index = self.hash_index(key)
-        node = self.storage[index]
-        if node is None:
-            self.storage[index] = Entry(key, value)
-            return
-        prev = node
-        while node is not None and node.key != key:
-            prev = node
-            node = node.next
-        if node != None:
-            node.value = value
-        prev.next = Entry(key, value)
-        # resize if load factor is too large
-        load = self.get_load_factor()
-        if load > 0.7:
-            self.resize(self.capacity * 2)
-        if load < 0.2:
-            self.resize(self.capacity / 2)
+        # Your code here
+        hash_index = self.hash_index(key)
+
+        # insert into an empty spot
+        if not self.storage[hash_index]:
+            self.storage[hash_index] = HashTableEntry(key, value)
+            self.item_stored += 1
+
+        # linked list exists at current location
+        # two situations: update value for an existing key or create a new entry for the new key
+        else:
+            current = self.storage[hash_index]
+
+            while current.key != key and current.next:
+                current = current.next
+
+            # find key, update current value
+            if current.key == key:
+                current.value = value
+
+            # key not found, add a entry
+            else:
+                current.next = HashTableEntry(key, value)
+                self.item_stored += 1
+
+        # resize if load factor is too big
+        if self.get_load_factor() > 0.7:
+            self.resize(self.capacity*2)
 
     def delete(self, key):
         """
@@ -107,23 +127,38 @@ class HashTable:
         Print a warning if the key is not found.
         Implement this.
         """
-        index = self.hash_index(key)
-        node = self.storage[index]
-        prev = None
-        while node is not None and node.key != key:
-            prev = node
-            node = node.next
-        if node is None:
-            return None
+        # Your code here
+        hash_index = self.hash_index(key)
+        current = self.storage[hash_index]
+        # 1. nothing to delete
+        if not current:
+            print("The key is not found")
+
+        # 2. 1 element, the head in the index bucket
+        elif not current.next:
+            self.storage[hash_index] = None
+            self.item_stored -= 1
         else:
-            self.size -= 1
-            self.keys.remove(key)
-            result = node.value
-            if prev is None:
-                self.storage[index] = node.next
+            # store a pointer to the previous node
+            prev = None
+
+            # Move to the next node if key won't match and there is a next
+            while current.key != key and current.next:
+                prev = current
+                current = current.next
+
+            # 3. value to delete in the end of index bucket
+            if not current.next:
+                prev.next = None
+                self.item_stored -= 1
+            # 4. value in the middle of the index bucket
             else:
-                prev.next = prev.next.next
-            return result
+                prev.next = current.next
+                self.item_stored -= 1
+
+        # resize if load factor is too small
+        if self.get_load_factor() < 0.2:
+            self.resize(self.capacity // 2)
 
     def get(self, key):
         """
@@ -131,14 +166,18 @@ class HashTable:
         Returns None if the key is not found.
         Implement this.
         """
-        index = self.hash_index(key)
-        node = self.storage[index]
-        while node is not None and node.key != key:
-            node = node.next
-        if node is None:
-            return None
+        # Your code here
+        hash_index = self.hash_index(key)
+        if self.storage[hash_index]:
+            current = self.storage[hash_index]
+            while current.key is not key and current.next:
+                current = current.next
+            if not current.next:
+                return current.value
+            else:
+                return current.value
         else:
-            return node.value
+            return None
 
     def resize(self, new_capacity):
         """
@@ -146,19 +185,24 @@ class HashTable:
         rehashes all key/value pairs.
         Implement this.
         """
-        old_storage = {}
-        for i in range(len(self.keys)):
-            key = self.keys[i]
-            old_storage[key] = self.get(key)
+        # Your code here
+        old_storage = self.storage
+
+        # initialize new hashtable
         self.capacity = new_capacity
-        self.storage = [None] * self.capacity
-        self.size = 0
-        for key, value in old_storage.items():
-            self.put(key, value)
+        self.storage = [None] * new_capacity
+
+        # loop through and add each node to new hashtable
+        for item in old_storage:
+            if item:
+                current = item
+                while current:
+                    self.put(current.key, current.value)
+                    current = current.next
 
 
 if __name__ == "__main__":
-    ht = HashTable(13)
+    ht = HashTable(8)
 
     ht.put("line_1", "'Twas brillig, and the slithy toves")
     ht.put("line_2", "Did gyre and gimble in the wabe:")
@@ -179,15 +223,15 @@ if __name__ == "__main__":
     for i in range(1, 13):
         print(ht.get(f"line_{i}"))
 
-# Test resizing
-# old_capacity = ht.get_num_slots()
-# ht.resize(ht.capacity * 2)
-# new_capacity = ht.get_num_slots()
+    # Test resizing
+    old_capacity = ht.get_num_slots()
+    ht.resize(ht.capacity * 2)
+    new_capacity = ht.get_num_slots()
 
-# print(f"\nResized from {old_capacity} to {new_capacity}.\n")
+    print(f"\nResized from {old_capacity} to {new_capacity}.\n")
 
-# Test if data intact after resizing
-# for i in range(1, 13):
-#     print(ht.get(f"line_{i}"))
+    # Test if data intact after resizing
+    for i in range(1, 13):
+        print(ht.get(f"line_{i}"))
 
-# print("")
+    print("")
